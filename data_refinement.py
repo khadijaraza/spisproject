@@ -7,9 +7,6 @@ Original file is located at
     https://colab.research.google.com/drive/1EAot-zyoxiesf09yLvpZ0V6drY8RLL8f
 """
 
-!pip install lightkurve
-
-!pip install astroquery
 
 import lightkurve as lk
 import numpy as np
@@ -60,7 +57,7 @@ except Exception as e:
 print("\n--- Downloading Planet Light Curves (One by One) ---")
 list_of_planet_collections = []
 if planet_tics:
-    tics_to_download = planet_tics[:500]
+    tics_to_download = planet_tics[:]
     print(f"Downloading all TESS light curves for {len(tics_to_download)} hosts...")
 
     with warnings.catch_warnings():
@@ -84,7 +81,7 @@ else:
 print("\n--- Downloading False Positive Light Curves (One by One) ---")
 list_of_fp_collections = []
 if fp_tics:
-    tics_to_download = fp_tics[:500]
+    tics_to_download = fp_tics[:]
     print(f"Downloading all TESS light curves for {len(tics_to_download)} false positives...")
 
     with warnings.catch_warnings():
@@ -250,14 +247,3 @@ with open(output_filename, 'wb') as f:
     pickle.dump(full_dataset, f)
 
 print(f"Dataset with {len(full_dataset)} items was successfully saved to '{output_filename}'")
-
-for lc in processed_lcs_planets:
-    if sufficient_snr(lc):
-      lc.plot(title="Planet Candidate") # Add a title for planet light curves
-      #plt.close() # Close the plot to avoid the warning
-
-
-for lc in processed_lcs_fps:
-    if sufficient_snr(lc):
-      lc.plot(title="False Positive (Star)") # Add a title for false positive light curves
-      #plt.close() # Close the plot to avoid the warning
