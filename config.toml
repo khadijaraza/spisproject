@@ -6,3 +6,5 @@ secondaryBackgroundColor="#1A1A22" # Slightly lighter dark for sidebar/widgets
 textColor="#F0F0F0" # Bright off-white for main text
 primaryColor="#FF0077" # Vibrant pink for buttons, links, highlights
 font="sans serif" # Modern, clean font
+[client]
+showWarningOnScreen = false
