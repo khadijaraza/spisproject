@@ -59,6 +59,13 @@ def load_model_and_features_from_url():
         st.error(f"Error loading model from GitHub: {e}")
         return None, None
 
+@st.cache_data
+def load_metadata():
+    """Loads and caches the metadata CSV file."""
+    try:
+        return pd.read_csv("training_set_metadatacopy.csv")
+    except FileNotFoundError:
+        return None
 
 @st.cache_data
 def load_full_dataset():
@@ -73,9 +80,15 @@ def load_full_dataset():
 def get_light_curve_from_df(object_id, full_df):
     """Extracts a light curve for a single object from the main dataframe."""
     obj_df = full_df[full_df['object_id'] == object_id]
+    
+    # --- THIS IS THE FIX ---
+    # Filter for only the real detections, just like in your training notebook.
+    obj_df = obj_df[obj_df['detected'] == 1]
+    
     if obj_df.empty:
-        return f"No light curve data found for object_id {object_id}."
+        return f"No detected data points found for object_id {object_id}."
     return lk.LightCurve(time=obj_df['mjd'], flux=obj_df['flux'], flux_err=obj_df['flux_err'])
+
 
 def getFeatures(lc):
     """This is the same feature engineering function from your notebook."""
@@ -111,53 +124,73 @@ def getFeatures(lc):
 # --- Streamlit UI ---
 model, feature_columns = load_model_and_features_from_url()
 full_lc_df = load_full_dataset()
+meta_df = load_metadata()
 
-EXAMPLES = {
-    "Black Hole Event (Class 16)": {"object_id": 713, "image": "https://heasarc.gsfc.nasa.gov/docs/tess/images/Target-Pixel-Files_files/Target-Pixel-Files_54_0.png"},
-    "Supernova Event (Class 90)": {"object_id": 615, "image": "https://heasarc.gsfc.nasa.gov/docs/tess/images/Target-Pixel-Files_files/Target-Pixel-Files_54_0.png"},
-    "Pulsating Star (RR Lyrae, Class 92)": {"object_id": 1124, "image": "https://heasarc.gsfc.nasa.gov/docs/tess/images/Target-Pixel-Files_files/Target-Pixel-Files_54_0.png"}
+# Define the categories and their corresponding class IDs
+CATEGORIES = {
+    "Black Hole": {"class_ids": [15,88,64,6], "image": "https://eventhorizontelescope.org/sites/g/files/omnuum3116/files/eht/files/avgimage_afmhot_us_edit.png"},
+    "Supernova": {"class_ids": [90,67,52,62,42,95], "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQCDwWV-rRqNPYNCmc65GMhDAQ3LgO5IyvlUg&s"},
+    "Variable Star ": {"class_ids": [65,26,53,92], "image": "https://d.sciencetimes.com/en/full/33231/science-times-xsp-nasa-esa-hubble-space-telescopes-advanced-camera-images.jpg?w=875&f=98b9a32b4c8bdf074f1574c5719c1c69"}
 }
 
-if model is None or full_lc_df is None:
-    st.stop() # Don't run the rest of the app if files are missing
-
-cols = st.columns(3)
-col_names = list(EXAMPLES.keys())
-
-for i, col in enumerate(cols):
-    with col:
-        name = col_names[i]
-        example = EXAMPLES[name]
-        obj_id = example["object_id"]
-        
-        st.header(name)
-        st.image(example["image"], use_column_width=True)
-        
-        lc = get_light_curve_from_df(obj_id, full_lc_df)
-        
-        if isinstance(lc, lk.LightCurve):
-            fig, ax = plt.subplots()
-            lc.scatter(ax=ax, s=2)
-            ax.set_title(f"Light Curve for Object {obj_id}")
-            st.pyplot(fig)
+def get_new_examples():
+    new_examples = {}
+    for name, details in CATEGORIES.items():
+        # --- FIX: Check if the target is in the LIST of class IDs ---
+        possible_ids = meta_df[meta_df['target'].isin(details['class_ids'])]['object_id'].tolist()
+        if possible_ids:
+            random_id = np.random.choice(possible_ids)
+            new_examples[name] = {"object_id": random_id, "image": details["image"]}
         else:
-            st.warning(lc)
+            # Handle case where no objects of this class are in the metadata
+            new_examples[name] = {"object_id": "N/A", "image": details["image"]}
+    return new_examples
 
-        if st.button(f"Classify {name}", key=f"button_{i}"):
+# Initialize or update the examples
+if 'examples' not in st.session_state:
+    st.session_state.examples = get_new_examples()
+
+if st.button("🔄 Shuffle Examples"):
+    st.session_state.examples = get_new_examples()
+
+# --- Main UI ---
+if model is None or meta_df is None or full_lc_df is None:
+    st.error("A required data or model file was not found. Please check your project folder.")
+else:
+    cols = st.columns(3)
+    col_names = list(st.session_state.examples.keys())
+
+    for i, col in enumerate(cols):
+        with col:
+            name = col_names[i]
+            example = st.session_state.examples[name]
+            obj_id = example["object_id"]
+            
+            st.header(name)
+            st.image(example["image"], use_column_width=True, caption=f"Object ID: {obj_id}")
+            
+            lc = get_light_curve_from_df(obj_id, full_lc_df)
+            
+            lc = get_light_curve_from_df(obj_id, full_lc_df)
+            
             if isinstance(lc, lk.LightCurve):
-                with st.spinner("Engineering features and predicting..."):
-                    # 1. Feature Engineering
-                    features = getFeatures(lc)
-                    features_df = pd.DataFrame([features])
-                    
-                    # 2. Ensure columns are in the correct order for the model
-                    features_df = features_df[feature_columns]
+                fig, ax = plt.subplots()
+                lc.scatter(ax=ax, s=2)
+                ax.set_title(f"Light Curve for Object {obj_id}")
+                st.pyplot(fig)
 
-                    # 3. Make Prediction
-                    prediction = model.predict(features_df)
-                    prediction_proba = model.predict_proba(features_df)
-                    
-                    predicted_class = prediction[0]
-                    confidence = np.max(prediction_proba)
-                    
-                    st.success(f"**Model Prediction:** {predicted_class} (Confidence: {confidence:.1%})")
+                if st.button(f"Classify {name}", key=f"button_{i}"):
+                    with st.spinner("Engineering features and predicting..."):
+                        features = getFeatures(lc)
+                        features_df = pd.DataFrame([features])
+                        features_df = features_df[feature_columns]
+
+                        prediction = model.predict(features_df)
+                        prediction_proba = model.predict_proba(features_df)
+                        
+                        predicted_class = prediction[0]
+                        confidence = np.max(prediction_proba)
+                        
+                        st.success(f"**Model Prediction:** {predicted_class} (Confidence: {confidence:.1%})")
+            else:
+                st.warning(lc)
