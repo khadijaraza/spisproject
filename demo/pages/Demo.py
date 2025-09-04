@@ -3,74 +3,113 @@ import streamlit as st
 import lightkurve as lk
 import numpy as np
 import matplotlib.pyplot as plt
-from style_utils import set_page_theme
+import pandas as pd
+import joblib
+import pickle
+from scipy.stats import skew, kurtosis
+import os
 
-st.set_page_config(page_title="Demo", page_icon="🚀", layout="wide")
-set_page_theme("https://i.pinimg.com/originals/97/8c/f7/978cf71ad42ee5695cfd4fc5d7d07a68.gif")
+# (Your background-setting code/imports go here, e.g., from style_utils)
 
-st.title("🚀 Model Demonstrator")
-st.write("This page demonstrates the classifier on three distinct types of celestial objects with accessible TESS data.")
+st.title("🚀 Live Model Demo")
+st.write("Choose a real celestial object. The app will download its TESS data, engineer features, and classify it with the trained Random Forest model.")
 st.markdown("---")
 
+# --- Load Model and Feature Engineering Functions ---
+@st.cache_resource
+def load_model_and_features():
+    """Loads the pre-trained model and feature list."""
+    try:
+        model = joblib.load('random_forest_model.joblib')
+        with open('feature_columns.pkl', 'rb') as f:
+            feature_columns = pickle.load(f)
+        return model, feature_columns
+    except FileNotFoundError:
+        st.error("Model or feature file not found. Make sure 'random_forest_model.joblib' and 'feature_columns.pkl' are in your repository.")
+        return None, None
+
 @st.cache_data
-def load_and_process_example(tic_id):
+def load_light_curve(tic_id):
+    """Downloads and caches a light curve from MAST."""
     try:
         search = lk.search_lightcurve(target=tic_id, author="TESS-SPOC")
+        if not search: 
+            return "No TESS-SPOC data found."
         lc_collection = search.download_all()
-        stitched_lc = lc_collection.stitch().remove_nans().remove_outliers()
-        period = stitched_lc.to_periodogram('bls', minimum_period=0.2, maximum_period=30).period_at_max_power
-        folded_lc = stitched_lc.fold(period=period)
-        binned_lc = folded_lc.bin(time_bin_size=0.02)
-        return binned_lc.normalize()
+        return lc_collection.stitch().remove_nans().remove_outliers()
     except Exception as e:
-        return f"Could not process: {e}"
+        return f"Could not download data: {e}"
+
+def getFeatures(lc):
+    """This is the same feature engineering function from your notebook."""
+    flux = lc.flux.value
+    time = lc.time.value
+    flux_err = lc.flux_err.value
+    
+    # Your feature calculations (adapted from the notebook)
+    peak_flux = np.max(flux)
+    peak_time = time[np.argmax(flux)]
+    half_max = peak_flux / 2
+    above_half = time[flux >= half_max]
+    fwhm = above_half.max() - above_half.min() if len(above_half) > 1 else 0
+    flux_diff = np.diff(flux)
+    vn_ratio = np.sum((flux_diff)**2) / ((len(flux)-1) * np.var(flux)) if len(flux) > 1 else 0
+
+    features = {
+      "mean_flux": np.mean(flux), "std_flux": np.std(flux),
+      "amplitude": np.max(flux) - np.min(flux), "median_flux": np.median(flux),
+      "flux_skew": skew(flux), "flux_kurtosis": kurtosis(flux),
+      "flux_p25": np.percentile(flux, 25), "flux_p75": np.percentile(flux, 75),
+      "flux_range_50": np.percentile(flux, 75) - np.percentile(flux, 25),
+      "lc_duration": time.max() - time.min(),
+      "rise_time": time[np.argmax(flux)] - time.min(),
+      "decay_time": time.max() - time[np.argmax(flux)],
+      "rise_decay_ratio": (peak_time - time.min()) / (time.max() - peak_time + 1e-5),
+      "fwhm": fwhm, "vn_ratio": vn_ratio,
+      "excess_var": np.var(flux) - np.mean(flux_err**2),
+      "slope_mean": np.mean(np.diff(flux) / np.diff(time)),
+      "slope_std": np.std(np.diff(flux) / np.diff(time)),
+    }
+    return features
+
+# --- Streamlit UI ---
+model, feature_columns = load_model_and_features()
 
 EXAMPLES = {
-    "Exoplanet Transit (TOI 700 d)": {
-        "tic_id": "TIC 150428135",
-        "image": "https://exoplanets.nasa.gov/internal_resources/2236/",
-        "correct_label": "Planet Candidate"
-    },
-    "Eclipsing Binary Star": {
-        "tic_id": "TIC 204214461",
-        "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c2/Binary_star_eclipse.gif/220px-Binary_star_eclipse.gif",
-        "correct_label": "False Positive (Star)"
-    },
-    "Pulsating Variable Star": {
-        "tic_id": "TIC 259849649",
-        "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Delta_Scuti.svg/300px-Delta_Scuti.svg.png",
-        "correct_label": "False Positive (Star)"
-    }
+    "Eclipsing Binary Star": "TIC 204214461",
+    "Pulsating Variable Star": "TIC 259849649",
 }
 
-cols = st.columns(3)
-col_names = list(EXAMPLES.keys())
+selection_name = st.selectbox("Choose an example to classify:", list(EXAMPLES.keys()))
+selected_tic = EXAMPLES[selection_name]
 
-for i, col in enumerate(cols):
-    with col:
-        name = col_names[i]
-        example = EXAMPLES[name]
-        
-        st.header(name)
-        st.image(example["image"])
-        
-        processed_lc = load_and_process_example(example["tic_id"])
-        
-        if isinstance(processed_lc, lk.LightCurve):
-            fig, ax = plt.subplots()
-            processed_lc.scatter(ax=ax)
-            ax.set_title(f"Processed Light Curve for {example['tic_id']}")
-            st.pyplot(fig)
-        else:
-            st.warning(processed_lc)
+if st.button(f"Classify {selection_name}"):
+    if model and feature_columns:
+        with st.spinner(f"Downloading and processing TIC {selected_tic}..."):
+            lc = load_light_curve(selected_tic)
+            
+            if isinstance(lc, str):
+                st.error(lc) # Show error message if download failed
+            else:
+                # 1. Feature Engineering
+                features = getFeatures(lc)
+                features_df = pd.DataFrame([features])
+                
+                # 2. Ensure columns are in the correct order
+                features_df = features_df[feature_columns]
 
-        if st.button(f"Classify {name}", key=f"button_{i}"):
-            with st.spinner("Model is predicting..."):
-                if example["correct_label"] == "Planet Candidate":
-                    score = np.random.uniform(0.8, 0.99)
-                    st.success(f"Prediction: {example['correct_label']} (Confidence: {score:.1%})")
-                    st.progress(score)
-                else:
-                    score = np.random.uniform(0.01, 0.2)
-                    st.info(f"Prediction: {example['correct_label']} (Confidence: {1-score:.1%})")
-                    st.progress(score)
+                # 3. Make Prediction
+                prediction = model.predict(features_df)
+                prediction_proba = model.predict_proba(features_df)
+                
+                # --- Display the Results ---
+                st.subheader("Results")
+                fig, ax = plt.subplots()
+                lc.scatter(ax=ax)
+                ax.set_title(f"Light Curve for TIC {selected_tic}")
+                st.pyplot(fig)
+                
+                predicted_class = prediction[0]
+                confidence = np.max(prediction_proba)
+                
+                st.success(f"**Model Prediction:** {predicted_class} (Confidence: {confidence:.1%})")

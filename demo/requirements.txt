@@ -1,0 +1,10 @@
+# requirements.txt
+streamlit
+lightkurve
+tensorflow
+numpy
+matplotlib
+astroquery
+pandas
+scikit-learn
+joblib
