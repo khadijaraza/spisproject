@@ -7,6 +7,8 @@ import pandas as pd
 import joblib
 import pickle
 from scipy.stats import skew, kurtosis
+import requests
+import os 
 
 # (Your background-setting code/imports go here, e.g., from style_utils)
 
@@ -17,16 +19,46 @@ st.markdown("---")
 # --- Load Model, Data, and Feature Engineering Functions ---
 
 @st.cache_resource
-def load_model_and_features():
-    """Loads the pre-trained model and feature list."""
+def load_model_and_features_from_url():
+    """
+    Downloads and loads the pre-trained model and feature list from GitHub Releases
+    by first saving them to a temporary local file.
+    """
     try:
-        model = joblib.load('random_forest_model.joblib')
-        with open('feature_columns.pkl', 'rb') as f:
+        # --- PASTE YOUR GITHUB RELEASE LINKS HERE ---
+        model_url = "https://github.com/khadijaraza/spisproject/releases/download/v1.0/random_forest_model.joblib"
+        features_url = "https://github.com/khadijaraza/spisproject/releases/download/v1.0/feature_columns.pkl"
+        
+        # --- Define temporary local file paths ---
+        model_path = "temp_model.joblib"
+        features_path = "temp_features.pkl"
+
+        # --- Download and save the model file ---
+        if not os.path.exists(model_path):
+            with st.spinner("Downloading model... (this happens once)"):
+                response_model = requests.get(model_url)
+                response_model.raise_for_status()
+                with open(model_path, "wb") as f:
+                    f.write(response_model.content)
+        
+        # --- Download and save the features file ---
+        if not os.path.exists(features_path):
+            response_features = requests.get(features_url)
+            response_features.raise_for_status()
+            with open(features_path, "wb") as f:
+                f.write(response_features.content)
+
+        # --- Load from the local file paths ---
+        model = joblib.load(model_path)
+        with open(features_path, 'rb') as f:
             feature_columns = pickle.load(f)
+            
         return model, feature_columns
-    except FileNotFoundError:
-        st.error("Model or feature file not found. Make sure 'random_forest_model.joblib' and 'feature_columns.pkl' are in your repository.")
+        
+    except Exception as e:
+        st.error(f"Error loading model from GitHub: {e}")
         return None, None
+
 
 @st.cache_data
 def load_full_dataset():
@@ -77,7 +109,7 @@ def getFeatures(lc):
     return features
 
 # --- Streamlit UI ---
-model, feature_columns = load_model_and_features()
+model, feature_columns = load_model_and_features_from_url()
 full_lc_df = load_full_dataset()
 
 EXAMPLES = {
