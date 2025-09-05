@@ -15,53 +15,54 @@ set_page_theme(image_address)
 
 # ... (the rest of your page code) ...
 
-st.title("Classification of TESS Light Curves")
-
-
-# In your app.py, after the section describing your CNN project:
-
-st.markdown("---")
-st.header("A Complementary Approach: Feature Engineering with a Random Forest Classifier")
-st.write("""
-This project explores a powerful alternative to the CNN model, leveraging a classical machine learning approach to classify celestial objects. Instead of relying on the raw visual pattern of the light curve, this method uses a **Random Forest** model trained on a set of descriptive, hand-engineered features extracted from the time-series data.
-""")
-
-st.subheader("The Dataset: A Simulated Universe")
-st.write("""
-The model was trained using the **PLAsTiCC 2018 Kaggle competition dataset**, a simulated dataset designed to mimic the cadence and noise properties of real astronomical surveys. This dataset is particularly challenging as it contains 15 different classes of celestial objects, many of which are rare, introducing the real-world problem of **class imbalance**. For this project, the task was refined to focus on a subset of these classes, primarily distinguishing between different types of stellar variability.
-""")
-
-st.subheader("Methodology: From Time-Series to Tabular Features")
-st.write("""
-While a CNN learns features automatically, a Random Forest's power depends on the quality of its input features. This project's core is a sophisticated **feature engineering** pipeline that transforms each light curve from a sequence of points into a rich set of statistical descriptors.
-""")
-st.markdown("""
-By analyzing the properties of the time-series data, we can provide the model with crucial information, such as:
-- **Statistical Moments:** Mean, median, standard deviation, skewness, and kurtosis of the brightness measurements.
-- **Periodicity Features:** The dominant period of variation, amplitude, and significance of the signal.
-- **Flux Ratios:** Ratios of brightness measurements across different photometric bands (colors).
-
-This process converts the complex time-series problem into a structured, tabular classification task, which is ideal for a Random Forest. The model—an ensemble of decision trees—is then trained on these features. A key advantage of this approach is its **interpretability**; after training, we can directly inspect the model to see which specific features, like `amplitude` or `period`, were most important for its classification decisions.
-""")
-
+st.title("Classification of Astronomical Transients with Machine Learning")
 st.markdown("---")
 
-st.markdown("### An End-to-End Data Pipeline for Exoplanet Candidate Vetting and CNN Classifiers")
 
-st.subheader("Abstract")
+st.header("Introduction")
 st.write("""
-The Transiting Exoplanet Survey Satellite (TESS) produces a vast stream of time-series photometric data, presenting a significant data analysis challenge. Within this dataset, signals indicative of exoplanets must be distinguished from astrophysical false positives, such as eclipsing binary stars. This project implements a complete pipeline to address this challenge, leveraging a Convolutional Neural Network (CNN) to perform automated classification based on the morphological features of light curve signals. We demonstrate a robust workflow encompassing data ingestion, parallelized preprocessing, and a deep learning model for candidate vetting.
+Over the past two decades, the volume of astronomical data collected has grown far beyond our expectations. Telescopes and facilities such as the Large Synoptic Survey Telescope (LSST) are expected to record tens of millions of new variable and transient events every night. Machine Learning has become essential for automatically classifying and interpreting time-series data such as light curves.
 """)
 
-st.subheader("System Architecture & Methodology")
+st.header("Our Model")
+st.write("""
+Our machine-learning model analyzes light curves to determine the type of object or phenomenon producing them. It is trained on astronomical time-series data from the PLAsTiCC 2018 dataset depicting multiple measurements of a celestial object’s brightness over time.
+""")
+st.write("""
+Our ML project explores a powerful alternative to the CNN model, leveraging a classical machine learning approach to classify celestial objects. Instead of relying on the raw visual pattern of the light curve, this method uses a **Random Forest** model trained on a set of descriptive statistical and astrophysical features extracted from the time-series data.
+""")
 st.markdown("""
-The project is structured as a scalable pipeline designed to process raw target lists into a model-ready dataset. Key stages include:
+While a CNN learns features automatically, a Random Forest's power depends on the quality of its input features. By analyzing the properties of the time-series data, we can provide the model with crucial information, such as:
+* **Statistical Moments:** Mean, median, standard deviation, skewness, and kurtosis of the brightness measurements.
+* **Periodicity Features:** The dominant period of variation, amplitude, and significance of the signal.
+* **Flux Ratios:** Ratios of brightness measurements across different photometric bands, or colors.
 
-1.  **Data Ingestion & Validation:** Target lists are sourced from the NASA Exoplanet Archive and TESS Objects of Interest (TOI) catalogs. A robust validation routine handles "poison pill" scenarios—where single invalid Target IDs cause batch query failures—by checking each target individually before initiating large, efficient batch downloads.
+This process converts the complex time-series problem into a structured tabular classification task, which is ideal for a Random Forest. The model is an ensemble of decision trees that asks a series of yes/no questions about the features, and then aggregates the results to make a robust prediction. By training on hundreds of decision trees, the Random Forest can reliably distinguish between broad categories such as supernova events, variable stars, and black hole-related events.
+""")
 
-2.  **Preprocessing:** A custom function finds the most probable period by analyzing each observation sector independently. The data is then stitched, flattened to remove stellar variability, and folded. The final light curve is binned to a uniform length to create a consistent input vector for the neural network.
+st.subheader("Advantages of Random Forest")
+st.write("""
+One of the strongest advantages of using a Random Forest is directly inspecting the model to see which features such as “amplitude” or “period” were most important in classification decisions. These are also known as feature importances; if the model consistently relies on amplitude to separate variable stars from black hole events, that gives us confidence that the classifier is basing its decisions on meaningful properties. This ensures that the ML model isn't just a “black box”, but rather that it could provide insight into its own decision making process.
+""")
 
-3.  **Classification:** A 1D Convolutional Neural Network, built in TensorFlow/Keras, is trained on the preprocessed data to distinguish between the characteristically U-shaped transits of exoplanets and the V-shaped eclipses of stellar false positives.
+st.header("The Dataset")
+st.write("""
+The model was trained on the PLAsTiCC 2018 Kaggle competition dataset, a simulated dataset designed to mimic the cadence and noise properties of real astronomical surveys such as the Large Synoptic Survey Telescope (LSST). PLAsTiCC is particularly challenging as it contains 15 different classes of celestial objects, many of which are rare. This introduces a common problem in ML known as class imbalance, where models can become biased towards predicting the majority classes in the presence of minority classes.
+""")
+st.write("""
+To address class imbalance, particularly for rare astrophysical events, we used SMOTE to generate synthetic examples of underrepresented classes, ensuring the model can learn effectively across all categories. We also decided to focus on a subset of these classes by splitting the 15 classes into three broad categories: Supernovae events, variable stars, and black hole-related events. Although this does not account for the true diversity in astronomical phenomena, it differentiates between important key features and increases the accuracy of the model.
+""")
+st.success("""
+**Result:** This strategy proved highly effective. By focusing on these three categories and training a Random Forest on engineered statistical and time-based features, our classifier achieved an **overall accuracy of 93%**. The performance is almost balanced across all classes, with supernovae and black hole events both classified with ~91% precision and recall, and variable stars achieving ~98%. With more incoming light curve data from a variety of celestial objects/phenomena, however, we hope to include rarer but scientifically valuable events as their own classes in the future.
+""")
 
-Navigate to the **🚀 Demo** page to see a conceptual demonstration of the classifier.
+st.header("About Light Curves & Their Significance")
+st.write("""
+Light curves are short measurements of a celestial object’s brightness, or “flux”, as a function over time. Different objects have different periods of brightness, and the record of changes in brightness is a tool that can not only help astronomers identify a certain celestial object but also understand its inner workings.
+""")
+st.write("""
+Here is how a certain phenomena may occur via a light curve: When a star explodes, it generates a bright ‘supernova’ signal that fades with time, but that signal does not ever repeat. Other events such as variables vary repeatedly in brightness, in a periodic way (RR Lyrae), episodically at the heart of galaxies (AGNs), and much more.
+""")
+st.write("""
+Variation in these bright sources can provide important clues about themselves and their environment, as well as the evolution of the universe as a whole. Without light curve measurements from Type 1a supernovae, we wouldn't have retrieved the first evidence of accelerated expansion of the universe beyond theory. Variable star light curves provide clues that help us understand stellar evolution, the physics of explosions, and create accurate long-distance estimates between galaxies.
 """)
