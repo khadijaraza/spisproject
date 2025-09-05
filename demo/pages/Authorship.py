@@ -9,7 +9,7 @@ st.title("📚 Authorship & Sources")
 st.markdown("---")
 
 st.header("Authorship")
-st.write("This project was created by **[Your Name Here]** with the assistance of Google's Gemini.")
+st.write("This project was created by **Sudisha and Khadija** with the assistance of Google's Gemini.")
 
 st.header("Data Sources")
 st.markdown("""
@@ -23,4 +23,5 @@ st.markdown("""
 - **`streamlit`:** For building this interactive web application.
 - **`tensorflow` & `keras`:** For the deep learning model.
 - **`numpy` & `pandas`:** For data manipulation.
+- ** `PLAsTiCC` dataset from Kaggle mimicing timeseries data from MAST
 """)
